@@ -54,3 +54,12 @@ def position_mask(x : int, y : int, step : int) -> np.ndarray:
             if i < j - step:
                 mask_matrix[i][j] = -np.inf
     return mask_matrix
+
+def cross_entropy_loss(y_true, y_pred):
+    epsilon = 1e-12
+#    y_pred = np.clip(y_pred, epsilon, 1. - epsilon)    
+    loss = -np.sum(y_true * np.log(y_pred + epsilon))
+    return loss
+
+def cross_entropy_gradient(y_true, y_pred):
+    return y_pred - y_true

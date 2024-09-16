@@ -1,7 +1,6 @@
 import numpy as np
-from function_modul import softmax, padding_matrix, position_mask
+from function_modul import softmax, padding_matrix, position_mask, cross_entropy_loss, cross_entropy_gradient
 from generate_training_data import generate_training_data
-from cross_entropy_lost import cross_entropy_loss
 from encoder import encoder
 from decoder import decoder
 import pickle
@@ -9,7 +8,8 @@ import configparser
 from embedding import embedding
 import re
 
-training_mode = False
+training_mode = True
+learning_rate = 0.001
 
 config = configparser.ConfigParser()
 config.read('/Users/nancy/Desktop/LLM/config/config.ini')
@@ -36,7 +36,7 @@ with open(f'/Users/nancy/Desktop/LLM/parameter/vocab_index.pkl', 'rb') as file:
 with open(f'/Users/nancy/Desktop/LLM/parameter/vocab_onehot.pkl', 'rb') as file:
     one_hot_dict = pickle.load(file)
 
-def transformor(user_input,true_output = None):
+def transformor(user_input,true_output = None, learning_rate = 0.01):
     embedded_input = embedding()
     encoder_input_matrix = embedded_input(input_seq_length, list(user_input)) + position_encoding
     for layer in range(encoder_layers):
@@ -55,19 +55,26 @@ def transformor(user_input,true_output = None):
             decoder_input_matrix = decoders[layer](encoder_input_matrix, decoder_input_matrix, mask_matrix = position_mask(output_seq_length, output_seq_length, step))
         if step == output_seq_length - 1:
             break
-        next_char = characters_index_dict[softmax(decoder_input_matrix[step + 1] @ linear_matrix + bias).argmax()]
+        logits = decoder_input_matrix[step + 1] @ linear_matrix + bias
+        pred_y = softmax(logits)
+        next_char = characters_index_dict[pred_y.argmax()]
         decoder_input_list[step + 1] = next_char
         decoder_input_matrix = embedded_input(output_seq_length, decoder_input_list) + position_encoding
         if training_mode == True:
-            pred_y = np.array(one_hot_dict[next_char])
             true_y = np.array(one_hot_dict[true_output[step + 1]] if true_output else None)
-            print("Step", step + 1, "cross entropy loss: ", cross_entropy_loss(true_y, pred_y))
+            loss = cross_entropy_loss(true_y, pred_y)
+            gradient_logits = cross_entropy_gradient(true_y, pred_y)
+            gradient_weight = np.outer(decoder_input_matrix[step + 1], gradient_logits)
+            batch_gradient_weight += gradient_weight
+            print(f"Step {step + 1} cross entropy loss: {loss}")
+            print(f"Step {step + 1} Gradient logits: {gradient_logits}")
+            print(f"Step {step + 1} Gradient weight: {gradient_weight}")
     print("The result is: ", user_input, '=', ''.join(decoder_input_list[1:]))
 
 if training_mode:
     training_data = generate_training_data().items()
     for key, value in training_data:
-        transformor(key,value)
+        transformor(key,value,learning_rate)
 else:    
     while True:
         user_input = input("输入一个一位数的加减乘除法, q为退出: ").replace(' ','')
